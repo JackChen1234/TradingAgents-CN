@@ -36,8 +36,8 @@ def test_api_key_validation():
         ("sk-1234567890abcdef1234567890abcdef", True, "有效的 API Key"),
         ("sk-abcdef1234567890abcdef1234567890", True, "有效的 API Key"),
         ("AIzaSyC3JdZVjblI0rfT_SNXXL5a4kvZ13_12CE", True, "有效的 Google API Key"),
-        ("bce-v3/ALTAK-MOCKKEY1234567890/mockhash1234567890abcdef", True, "有效的千帆 API Key"),
-        ("sk-or-v1-mockkey1234567890abcdef1234567890abcdef123", True, "有效的 OpenRouter API Key"),
+        ("bce-v3/ALTAK-MOCKKEY1234567890/mockhash1234567890", True, "有效的千帆 API Key"),
+        ("sk-or-v1-mockkey1234567890abcdef1234567890abcdef", True, "有效的 OpenRouter API Key"),
         ('"sk-1234567890abcdef1234567890abcdef"', True, "带引号的有效 API Key"),
         ("'sk-1234567890abcdef1234567890abcdef'", True, "带单引号的有效 API Key"),
     ]
