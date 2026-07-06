@@ -43,7 +43,7 @@ pypandoc>=1.11  # 文档格式转换，用于导出报告功能
 python-docx>=0.8.11  # Word文档处理，用于修复文本方向
 pdfkit>=1.0.0  # PDF生成工具，需要wkhtmltopdf
 python-dotenv>=1.0.0  # 环境变量管理，用于.env文件解析
-fastapi>=0.104.0  # FastAPI框架，用于后端API
+fastapi>=0.104.0,<0.115.0  # 限制版本以兼容 starlette 0.37.x
 uvicorn[standard]>=0.24.0  # ASGI服务器，用于运行FastAPI
 pydantic>=2.0.0  # 数据验证，FastAPI依赖
 pydantic-settings>=2.0.0  # 设置管理，用于配置加载
@@ -53,6 +53,6 @@ bcrypt>=4.0.0  # 密码加密
 apscheduler>=3.10.0  # 任务调度器，用于定时任务
 aiofiles>=0.8.0  # 异步文件操作
 httpx>=0.24.0  # 异步HTTP客户端
-sse-starlette>=1.0.0  # Server-Sent Events支持
-starlette==0.37.2  # 强制使用包含 DEFAULT_EXCLUDED_CONTENT_TYPES 的版本
+sse-starlette>=1.0.0,<2.0.0  # 限制版本以兼容 starlette 0.37.x
+starlette>=0.37.0,<0.38.0  # 锁定包含 DEFAULT_EXCLUDED_CONTENT_TYPES 的版本
 concurrent-log-handler>=0.9.24  # Windows 友好的日志轮转处理器

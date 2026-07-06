@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     # 后端API框架和服务器
-    "fastapi>=0.104.0",
+    "fastapi>=0.104.0,<0.115.0",
     "uvicorn[standard]>=0.24.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
@@ -31,7 +31,8 @@ dependencies = [
 
     # HTTP客户端和SSE
     "httpx>=0.24.0",
-    "sse-starlette>=1.0.0",
+    "sse-starlette>=1.0.0,<2.0.0",
+    "starlette>=0.37.0,<0.38.0",
 
     # 日志处理
     "concurrent-log-handler>=0.9.24",  # Windows 友好的日志轮转处理器
@@ -81,7 +82,6 @@ dependencies = [
     "questionary>=2.1.0",
     "rich>=14.0.0",
     "setuptools>=80.9.0",
-    "starlette==0.37.2",
     "streamlit>=1.38.0",
     "toml>=0.10.2",
     "tqdm>=4.67.1",
