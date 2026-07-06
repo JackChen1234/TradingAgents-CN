@@ -741,9 +741,13 @@ class SimpleAnalysisService:
             task_id = str(uuid.uuid4())
 
             # 🔧 使用 get_symbol() 方法获取股票代码（兼容 symbol 和 stock_code 字段）
-            stock_code = request.get_symbol()
+            stock_code = (request.get_symbol() or getattr(request, 'symbol', '') or getattr(request, 'stock_code', '') or '').strip()
             if not stock_code:
-                raise ValueError("股票代码不能为空")
+                raise ValueError("股票代码不能为空，请检查输入或选择有效的股票")
+
+            # 同步更新 request 对象的属性，保证后续属性访问一致
+            request.symbol = stock_code
+            request.stock_code = stock_code
 
             logger.info(f"📝 创建分析任务: {task_id} - {stock_code}")
             logger.info(f"🔍 内存管理器实例ID: {id(self.memory_manager)}")
@@ -817,7 +821,10 @@ class SimpleAnalysisService:
     ):
         """在后台执行分析任务"""
         # 🔧 使用 get_symbol() 方法获取股票代码（兼容 symbol 和 stock_code 字段）
-        stock_code = request.get_symbol()
+        stock_code = (request.get_symbol() or getattr(request, 'symbol', '') or getattr(request, 'stock_code', '') or '').strip()
+        if stock_code:
+            request.symbol = stock_code
+            request.stock_code = stock_code
 
         # 添加最外层的异常捕获，确保所有异常都被记录
         try:

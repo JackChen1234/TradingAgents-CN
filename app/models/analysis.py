@@ -4,7 +4,7 @@
 
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict, field_serializer
+from pydantic import BaseModel, Field, ConfigDict, field_serializer, model_validator
 from enum import Enum
 from bson import ObjectId
 from .user import PyObjectId
@@ -153,26 +153,60 @@ class StockInfo(BaseModel):
 
 class SingleAnalysisRequest(BaseModel):
     """单股分析请求"""
-    symbol: Optional[str] = Field(None, description="6位股票代码")
-    stock_code: Optional[str] = Field(None, description="股票代码(已废弃,使用symbol)")
+    symbol: Optional[str] = Field(None, description="股票代码(例如：000001, AAPL)")
+    stock_code: Optional[str] = Field(None, description="股票代码(兼容字段)")
+    stockCode: Optional[str] = Field(None, description="股票代码(前端camelCase别名)")
+    code: Optional[str] = Field(None, description="股票代码(通用别名)")
+    ticker: Optional[str] = Field(None, description="股票代码(美股别名)")
     parameters: Optional[AnalysisParameters] = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            symbol_val = (
+                data.get("symbol")
+                or data.get("stock_code")
+                or data.get("stockCode")
+                or data.get("code")
+                or data.get("ticker")
+                or ""
+            )
+            if isinstance(symbol_val, str):
+                symbol_val = symbol_val.strip()
+            data["symbol"] = symbol_val
+            data["stock_code"] = symbol_val
+        return data
+
     def get_symbol(self) -> str:
-        """获取股票代码(兼容旧字段)"""
-        return self.symbol or self.stock_code or ""
+        """获取股票代码(兼容旧字段与各种别名)"""
+        return (self.symbol or self.stock_code or self.stockCode or self.code or self.ticker or "").strip()
 
 
 class BatchAnalysisRequest(BaseModel):
     """批量分析请求"""
     title: str = Field(..., description="批次标题")
     description: Optional[str] = None
-    symbols: Optional[List[str]] = Field(None, min_items=1, max_items=10, description="股票代码列表（最多10个）")
-    stock_codes: Optional[List[str]] = Field(None, min_items=1, max_items=10, description="股票代码列表(已废弃,使用symbols，最多10个)")
+    symbols: Optional[List[str]] = Field(None, description="股票代码列表")
+    stock_codes: Optional[List[str]] = Field(None, description="股票代码列表(兼容字段)")
+    stockCodes: Optional[List[str]] = Field(None, description="股票代码列表(前端camelCase别名)")
     parameters: Optional[AnalysisParameters] = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            raw_list = data.get("symbols") or data.get("stock_codes") or data.get("stockCodes") or []
+            if isinstance(raw_list, list):
+                cleaned = [str(item).strip() for item in raw_list if item and str(item).strip()]
+                data["symbols"] = cleaned
+                data["stock_codes"] = cleaned
+        return data
+
     def get_symbols(self) -> List[str]:
-        """获取股票代码列表(兼容旧字段)"""
-        return self.symbols or self.stock_codes or []
+        """获取股票代码列表(兼容旧字段与各种别名)"""
+        raw_list = self.symbols or self.stock_codes or self.stockCodes or []
+        return [str(s).strip() for s in raw_list if s and str(s).strip()]
 
 
 class AnalysisTaskResponse(BaseModel):

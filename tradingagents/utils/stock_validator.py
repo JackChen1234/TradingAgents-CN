@@ -95,38 +95,41 @@ class StockDataPreparer:
     
     def _validate_format(self, stock_code: str, market_type: str) -> StockDataPreparationResult:
         """验证股票代码格式"""
-        stock_code = stock_code.strip()
-        
-        if not stock_code:
+        if not stock_code or not str(stock_code).strip():
             return StockDataPreparationResult(
                 is_valid=False,
-                stock_code=stock_code,
+                stock_code=stock_code or "",
                 error_message="股票代码不能为空",
                 suggestion="请输入有效的股票代码"
             )
 
-        if len(stock_code) > 10:
+        stock_code = str(stock_code).strip()
+
+        if len(stock_code) > 15:
             return StockDataPreparationResult(
                 is_valid=False,
                 stock_code=stock_code,
-                error_message="股票代码长度不能超过10个字符",
+                error_message="股票代码长度不能超过15个字符",
                 suggestion="请检查股票代码格式"
             )
-        
+
         # 根据市场类型验证格式
         if market_type == "A股":
-            if not re.match(r'^\d{6}$', stock_code):
+            stock_upper = stock_code.upper()
+            is_six_digits = bool(re.match(r'^\d{6}$', stock_code))
+            is_suffix_ashare = bool(re.match(r'^\d{6}\.(SZ|SH|BJ)$', stock_upper))
+            if not (is_six_digits or is_suffix_ashare):
                 return StockDataPreparationResult(
                     is_valid=False,
                     stock_code=stock_code,
                     market_type="A股",
-                    error_message="A股代码格式错误，应为6位数字",
+                    error_message="A股代码格式错误，应为6位数字（如：000001、600519、000001.SZ）",
                     suggestion="请输入6位数字的A股代码，如：000001、600519"
                 )
         elif market_type == "港股":
             stock_code_upper = stock_code.upper()
-            hk_format = re.match(r'^\d{4,5}\.HK$', stock_code_upper)
-            digit_format = re.match(r'^\d{4,5}$', stock_code)
+            hk_format = bool(re.match(r'^\d{1,5}\.HK$', stock_code_upper))
+            digit_format = bool(re.match(r'^\d{1,5}$', stock_code))
 
             if not (hk_format or digit_format):
                 return StockDataPreparationResult(
@@ -134,10 +137,10 @@ class StockDataPreparer:
                     stock_code=stock_code,
                     market_type="港股",
                     error_message="港股代码格式错误",
-                    suggestion="请输入4-5位数字.HK格式（如：0700.HK）或4-5位数字（如：0700）"
+                    suggestion="请输入1-5位数字或标准格式（如：00700、0700.HK）"
                 )
         elif market_type == "美股":
-            if not re.match(r'^[A-Z]{1,5}$', stock_code.upper()):
+            if not bool(re.match(r'^[A-Z]{1,5}(\.[A-Z])?$', stock_code.upper())):
                 return StockDataPreparationResult(
                     is_valid=False,
                     stock_code=stock_code,
@@ -145,29 +148,32 @@ class StockDataPreparer:
                     error_message="美股代码格式错误，应为1-5位字母",
                     suggestion="请输入1-5位字母的美股代码，如：AAPL、TSLA"
                 )
-        
+
         return StockDataPreparationResult(
             is_valid=True,
             stock_code=stock_code,
             market_type=market_type
         )
-    
+
     def _detect_market_type(self, stock_code: str) -> str:
         """自动检测市场类型"""
-        stock_code = stock_code.strip().upper()
-        
-        # A股：6位数字
-        if re.match(r'^\d{6}$', stock_code):
+        if not stock_code or not str(stock_code).strip():
+            return "未知"
+
+        stock_code = str(stock_code).strip().upper()
+
+        # A股：6位数字，或带.SZ/.SH/.BJ
+        if re.match(r'^\d{6}$', stock_code) or re.match(r'^\d{6}\.(SZ|SH|BJ)$', stock_code):
             return "A股"
-        
-        # 港股：4-5位数字.HK 或 纯4-5位数字
-        if re.match(r'^\d{4,5}\.HK$', stock_code) or re.match(r'^\d{4,5}$', stock_code):
+
+        # 港股：1-5位数字.HK 或 1-5位数字
+        if re.match(r'^\d{1,5}\.HK$', stock_code) or re.match(r'^\d{1,5}$', stock_code):
             return "港股"
-        
+
         # 美股：1-5位字母
-        if re.match(r'^[A-Z]{1,5}$', stock_code):
+        if re.match(r'^[A-Z]{1,5}(\.[A-Z])?$', stock_code):
             return "美股"
-        
+
         return "未知"
 
     def _get_hk_network_limitation_suggestion(self) -> str:

@@ -220,9 +220,13 @@ class ChatDeepSeek(ChatOpenAI):
             估算的输出token数量
         """
         total_chars = 0
-        for generation in result.generations:
-            if hasattr(generation, 'message') and hasattr(generation.message, 'content'):
-                total_chars += len(str(generation.message.content))
+        for gen_item in result.generations:
+            if isinstance(gen_item, list):
+                for g in gen_item:
+                    if hasattr(g, 'message') and hasattr(g.message, 'content'):
+                        total_chars += len(str(g.message.content))
+            elif hasattr(gen_item, 'message') and hasattr(gen_item.message, 'content'):
+                total_chars += len(str(gen_item.message.content))
         
         # 粗略估算：2字符/token
         estimated_tokens = max(1, total_chars // 2)
@@ -255,11 +259,16 @@ class ChatDeepSeek(ChatOpenAI):
         # 调用生成方法
         result = self._generate(messages, **kwargs)
         
-        # 返回第一个生成结果的消息
-        if result.generations:
-            return result.generations[0].message
-        else:
-            return AIMessage(content="")
+        # 安全获取第一个生成结果的消息
+        if result and result.generations:
+            first = result.generations[0]
+            if isinstance(first, list) and first:
+                gen = first[0]
+                if hasattr(gen, 'message'):
+                    return gen.message
+            elif hasattr(first, 'message'):
+                return first.message
+        return AIMessage(content="")
 
 
 def create_deepseek_llm(

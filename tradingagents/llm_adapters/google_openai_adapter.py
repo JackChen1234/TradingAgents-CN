@@ -187,18 +187,18 @@ class ChatGoogleOpenAI(ChatGoogleGenerativeAI):
             error_str = str(e)
             if 'RESOURCE_EXHAUSTED' in error_str or '429' in error_str or 'Quota exceeded' in error_str:
                 error_content = f"Google AI (Gemini) 调用配额已满或超限 (429 Resource Exhausted)。\n\n请检查：\n1. 您的 Google API Key 是否触及免费额度上限或频率限制\n2. 建议在系统设置中切换为 gemini-2.5-flash 模型\n3. 详细信息: {error_str}"
-            elif 'API_KEY_INVALID' in error_str or 'API key not valid' in error_str:
-                error_content = "Google AI API Key 无效或未配置。\n\n请检查：\n1. GOOGLE_API_KEY 环境变量是否正确配置\n2. API Key 是否有效（访问 https://ai.google.dev/ 获取）\n3. 是否启用了 Gemini API\n\n建议：使用其他 AI 模型（如阿里百炼、DeepSeek）"
+            elif 'API_KEY_INVALID' in error_str or 'API key not valid' in error_str or 'PERMISSION_DENIED' in error_str or '403' in error_str or 'leaked' in error_str:
+                error_content = f"Google AI API Key 无效、泄露或无权限 (403 PERMISSION_DENIED)。\n\n错误信息: {error_str}\n\n请检查：\n1. GOOGLE_API_KEY 是否在 Google AI Studio 中已被标记泄露或已被禁用\n2. 请更换新的 Google API Key 并在设置中重新配置\n3. 或切换使用其他 AI 模型（如阿里百炼、DeepSeek）"
             elif 'Connection' in error_str or 'Network' in error_str:
                 error_content = f"Google AI 网络连接失败: {error_str}\n\n请检查：\n1. 网络连接是否正常\n2. 是否需要科学上网\n3. 防火墙设置"
             else:
                 error_content = f"Google AI 调用失败: {error_str}\n\n请检查配置或使用其他 AI 模型"
 
-            # 返回一个包含错误信息的结果，而不是抛出异常
-            from langchain_core.outputs import ChatGeneration
+            # 返回一个包含错误信息的 ChatResult，而不是抛出异常或错误的 LLMResult
+            from langchain_core.outputs import ChatGeneration, ChatResult
             error_message = AIMessage(content=error_content)
             error_generation = ChatGeneration(message=error_message)
-            return LLMResult(generations=[[error_generation]])
+            return ChatResult(generations=[error_generation])
     
     def _optimize_message_content(self, message: BaseMessage):
         """优化消息内容格式，确保包含新闻特征关键词"""
