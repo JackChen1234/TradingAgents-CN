@@ -3686,25 +3686,43 @@ class ConfigService:
                         "success": False,
                         "message": f"{display_name} API无有效候选响应"
                     }
+            elif response.status_code == 429:
+                print(f"❌ [Google AI 测试] 429 错误，响应内容: {response.text[:500]}")
+                return {
+                    "success": False,
+                    "message": f"{display_name} API 频率超限或配额耗尽 (HTTP 429 Resource Exhausted)。免费 Key 限制 15次/分钟，请等待 30~60 秒后重试，或切换为 gemini-2.5-flash 模型。"
+                }
             elif response.status_code == 400:
                 print(f"❌ [Google AI 测试] 400 错误，响应内容: {response.text[:500]}")
                 try:
                     error_detail = response.json()
-                    error_msg = error_detail.get("error", {}).get("message", "未知错误")
+                    error_msg = error_detail.get("error", {}).get("message", "请求格式或模型名称无效")
                     return {
                         "success": False,
-                        "message": f"{display_name} API请求错误: {error_msg}"
+                        "message": f"{display_name} API 请求参数错误 (HTTP 400): {error_msg}。请检查模型名称是否正确。"
                     }
                 except:
                     return {
                         "success": False,
-                        "message": f"{display_name} API请求格式错误"
+                        "message": f"{display_name} API 请求格式错误 (HTTP 400)"
                     }
+            elif response.status_code == 401:
+                print(f"❌ [Google AI 测试] 401 错误，响应内容: {response.text[:500]}")
+                return {
+                    "success": False,
+                    "message": f"{display_name} API 认证失败 (HTTP 401)，请检查 API Key 是否未填写或格式不正确。"
+                }
             elif response.status_code == 403:
                 print(f"❌ [Google AI 测试] 403 错误，响应内容: {response.text[:500]}")
                 return {
                     "success": False,
-                    "message": f"{display_name} API密钥无效或权限不足"
+                    "message": f"{display_name} API 密钥无效、已封禁或检测到泄露 (HTTP 403 Permission Denied)，请重新生成 Key。"
+                }
+            elif response.status_code == 404:
+                print(f"❌ [Google AI 测试] 404 错误，响应内容: {response.text[:500]}")
+                return {
+                    "success": False,
+                    "message": f"{display_name} 请求的模型不存在或路径错误 (HTTP 404)，推荐使用 gemini-2.5-flash。"
                 }
             elif response.status_code == 503:
                 print(f"❌ [Google AI 测试] 503 错误，响应内容: {response.text[:500]}")
@@ -3721,18 +3739,24 @@ class ConfigService:
                     else:
                         return {
                             "success": False,
-                            "message": f"{display_name} 服务暂时不可用: {error_msg}"
+                            "message": f"{display_name} 服务暂时不可用 (HTTP 503): {error_msg}"
                         }
                 except:
                     return {
                         "success": False,
                         "message": f"{display_name} 服务暂时不可用 (HTTP 503)"
                     }
+            elif response.status_code in [500, 502, 504]:
+                print(f"❌ [Google AI 测试] {response.status_code} 错误，响应内容: {response.text[:500]}")
+                return {
+                    "success": False,
+                    "message": f"{display_name} 服务器内部错误或请求超时 (HTTP {response.status_code})，请稍后重试。"
+                }
             else:
                 print(f"❌ [Google AI 测试] {response.status_code} 错误，响应内容: {response.text[:500]}")
                 return {
                     "success": False,
-                    "message": f"{display_name} API测试失败: HTTP {response.status_code}"
+                    "message": f"{display_name} API测试失败: HTTP {response.status_code} - {response.text[:200]}"
                 }
 
         except Exception as e:

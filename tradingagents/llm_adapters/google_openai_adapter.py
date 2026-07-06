@@ -183,22 +183,87 @@ class ChatGoogleOpenAI(ChatGoogleGenerativeAI):
             logger.error(f"❌ Google AI 生成失败: {e}")
             logger.exception(e)  # 打印完整的堆栈跟踪
 
-            # 检查是否为 API Key 无效错误或配额/超限错误
+            # 根据 Google API 官方错误码提供精准文案提示
             error_str = str(e)
-            if 'RESOURCE_EXHAUSTED' in error_str or '429' in error_str or 'Quota exceeded' in error_str:
-                error_content = f"Google AI (Gemini) 调用配额已满或超限 (429 Resource Exhausted)。\n\n请检查：\n1. 您的 Google API Key 是否触及免费额度上限或频率限制\n2. 建议在系统设置中切换为 gemini-2.5-flash 模型\n3. 详细信息: {error_str}"
-            elif 'API_KEY_INVALID' in error_str or 'API key not valid' in error_str:
-                error_content = "Google AI API Key 无效或未配置。\n\n请检查：\n1. GOOGLE_API_KEY 环境变量是否正确配置\n2. API Key 是否有效（访问 https://ai.google.dev/ 获取）\n3. 是否启用了 Gemini API\n\n建议：使用其他 AI 模型（如阿里百炼、DeepSeek）"
-            elif 'Connection' in error_str or 'Network' in error_str:
-                error_content = f"Google AI 网络连接失败: {error_str}\n\n请检查：\n1. 网络连接是否正常\n2. 是否需要科学上网\n3. 防火墙设置"
-            else:
-                error_content = f"Google AI 调用失败: {error_str}\n\n请检查配置或使用其他 AI 模型"
+            error_upper = error_str.upper()
 
-            # 返回一个包含错误信息的结果，而不是抛出异常
-            from langchain_core.outputs import ChatGeneration
+            if 'RESOURCE_EXHAUSTED' in error_upper or '429' in error_upper or 'QUOTA EXCEEDED' in error_upper or 'RATE LIMIT' in error_upper:
+                error_content = (
+                    "【Google AI 错误 429 - RESOURCE_EXHAUSTED】\n"
+                    "调用频率超出限制或每日配额已满。\n\n"
+                    "💡 排查与解决建议：\n"
+                    "1. 免费 API Key 限制为 15 次/分钟 (15 RPM)，请等待 30~60 秒后重试\n"
+                    "2. 推荐在系统设置中切换为 gemini-2.5-flash 模型\n"
+                    "3. 或在系统设置中切换使用 阿里百炼 (qwen-turbo) 或 DeepSeek 等高并发大模型\n\n"
+                    f"详细错误: {error_str}"
+                )
+            elif 'PERMISSION_DENIED' in error_upper or '403' in error_upper or 'LEAKED' in error_upper or 'API_KEY_INVALID' in error_upper or 'API KEY NOT VALID' in error_upper:
+                error_content = (
+                    "【Google AI 错误 403 - PERMISSION_DENIED】\n"
+                    "API Key 无效、已过期、无权限或被 Google 检测到泄露作废。\n\n"
+                    "💡 排查与解决建议：\n"
+                    "1. 请前往 Google AI Studio (https://aistudio.google.com/) 生成全新的 API Key\n"
+                    "2. 在系统设置 -> 配置管理 -> 厂家管理 (Google AI) 中更新 Key 并保存\n"
+                    "3. 切勿将包含真实 API Key 的代码提交到 GitHub 等公开仓库\n\n"
+                    f"详细错误: {error_str}"
+                )
+            elif 'UNAUTHENTICATED' in error_upper or '401' in error_upper:
+                error_content = (
+                    "【Google AI 错误 401 - UNAUTHENTICATED】\n"
+                    "身份认证失败，API Key 缺失或格式不正确。\n\n"
+                    "💡 排查与解决建议：\n"
+                    "1. 请检查系统设置中 Google API Key 是否已填入\n"
+                    "2. 请确认 Key 前后是否有无意粘贴的多余空格或换行符\n\n"
+                    f"详细错误: {error_str}"
+                )
+            elif 'INVALID_ARGUMENT' in error_upper or '400' in error_upper:
+                error_content = (
+                    "【Google AI 错误 400 - INVALID_ARGUMENT】\n"
+                    "请求参数错误或模型调用格式不兼容。\n\n"
+                    "💡 排查与解决建议：\n"
+                    "1. 请检查调用的模型名称是否正确（推荐使用 gemini-2.5-flash 或 gemini-1.5-flash）\n"
+                    "2. 检查输入的提示词或工具参数格式\n\n"
+                    f"详细错误: {error_str}"
+                )
+            elif 'NOT_FOUND' in error_upper or '404' in error_upper:
+                error_content = (
+                    "【Google AI 错误 404 - NOT_FOUND】\n"
+                    "请求的模型不存在或 API 路径错误。\n\n"
+                    "💡 排查与解决建议：\n"
+                    "1. 确认使用的模型名称（如 gemini-2.5-flash）拼写无误\n"
+                    "2. 请在系统设置中选择有效的标准 Gemini 模型\n\n"
+                    f"详细错误: {error_str}"
+                )
+            elif any(code in error_upper for code in ['INTERNAL', '500', 'SERVICE_UNAVAILABLE', '503', 'DEADLINE_EXCEEDED', '504']):
+                error_content = (
+                    "【Google AI 错误 5xx - 服务端故障/超时】\n"
+                    "Google 远程服务器发生内部错误、服务暂时不可用或响应超时。\n\n"
+                    "💡 排查与解决建议：\n"
+                    "1. Google 服务当前可能处于短暂停机或高负载中，请稍后再试\n"
+                    "2. 可临时切换为 阿里百炼 或 DeepSeek 模型继续分析\n\n"
+                    f"详细错误: {error_str}"
+                )
+            elif any(kw in error_upper for kw in ['CONNECTION', 'NETWORK', 'TIMEOUT', 'PROXY', 'SSL', 'UNREACHABLE']):
+                error_content = (
+                    "【Google AI 网络连接错误】\n"
+                    "无法连接到 Google API 服务器。\n\n"
+                    "💡 排查与解决建议：\n"
+                    "1. 请检查服务器/本地网络是否可以访问 generativelanguage.googleapis.com\n"
+                    "2. 如在国内网络环境使用，请确保开启了系统代理或配置了 base_url 中转\n\n"
+                    f"详细错误: {error_str}"
+                )
+            else:
+                error_content = (
+                    f"【Google AI 调用失败】\n"
+                    f"发生未预期错误: {error_str}\n\n"
+                    "💡 建议在系统设置中检查 API Key 及模型配置，或切换为备用模型。"
+                )
+
+            # 返回一个包含错误信息的 ChatResult，而不是抛出异常或错误的 LLMResult
+            from langchain_core.outputs import ChatGeneration, ChatResult
             error_message = AIMessage(content=error_content)
             error_generation = ChatGeneration(message=error_message)
-            return LLMResult(generations=[[error_generation]])
+            return ChatResult(generations=[error_generation])
     
     def _optimize_message_content(self, message: BaseMessage):
         """优化消息内容格式，确保包含新闻特征关键词"""
