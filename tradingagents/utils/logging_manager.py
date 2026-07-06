@@ -185,10 +185,17 @@ class TradingAgentsLogger:
     
     def _setup_logging(self):
         """设置日志系统"""
-        # 创建日志目录
+        # 创建日志目录（在只读文件系统如 Streamlit Cloud 上优雅降级）
+        _file_logging_available = False
         if self.config['handlers']['file']['enabled']:
             log_dir = Path(self.config['handlers']['file']['directory'])
-            log_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                log_dir.mkdir(parents=True, exist_ok=True)
+                _file_logging_available = True
+            except (PermissionError, OSError) as e:
+                # Streamlit Cloud 等只读环境无法创建日志目录，降级为仅控制台输出
+                _bootstrap_logger.warning(f"⚠️ 无法创建日志目录 {log_dir}: {e}，将仅使用控制台日志")
+                self.config['handlers']['file']['enabled'] = False
         
         # 设置根日志级别
         root_logger = logging.getLogger()
@@ -200,7 +207,7 @@ class TradingAgentsLogger:
         # 添加处理器
         self._add_console_handler(root_logger)
 
-        if not self.config['docker']['enabled'] or not self.config['docker']['stdout_only']:
+        if _file_logging_available and (not self.config['docker']['enabled'] or not self.config['docker']['stdout_only']):
             self._add_file_handler(root_logger)
             self._add_error_handler(root_logger)  # 🔧 添加错误日志处理器
             if self.config['handlers']['structured']['enabled']:
