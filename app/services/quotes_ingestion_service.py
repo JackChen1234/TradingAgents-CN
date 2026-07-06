@@ -382,23 +382,35 @@ class QuotesIngestionService:
             if code6 in ["300750", "000001", "600000"]:  # 只记录几个示例股票
                 logger.info(f"📊 [写入market_quotes] {code6} - volume={volume}, amount={q.get('amount')}, source={source}")
 
+            set_data = {
+                "code": code6,
+                "symbol": code6,
+                "close": q.get("close"),
+                "pct_chg": q.get("pct_chg"),
+                "amount": q.get("amount"),
+                "volume": volume,
+                "open": q.get("open"),
+                "high": q.get("high"),
+                "low": q.get("low"),
+                "pre_close": q.get("pre_close"),
+                "trade_date": trade_date,
+                "updated_at": updated_at,
+            }
+            if q.get("total_mv") is not None:
+                set_data["total_mv"] = q.get("total_mv")
+            if q.get("circ_mv") is not None:
+                set_data["circ_mv"] = q.get("circ_mv")
+            if q.get("pe") is not None:
+                set_data["pe"] = q.get("pe")
+            if q.get("pb") is not None:
+                set_data["pb"] = q.get("pb")
+            if q.get("turnover_rate") is not None:
+                set_data["turnover_rate"] = q.get("turnover_rate")
+
             ops.append(
                 UpdateOne(
                     {"code": code6},
-                    {"$set": {
-                        "code": code6,
-                        "symbol": code6,  # 添加 symbol 字段，与 code 保持一致
-                        "close": q.get("close"),
-                        "pct_chg": q.get("pct_chg"),
-                        "amount": q.get("amount"),
-                        "volume": volume,
-                        "open": q.get("open"),
-                        "high": q.get("high"),
-                        "low": q.get("low"),
-                        "pre_close": q.get("pre_close"),
-                        "trade_date": trade_date,
-                        "updated_at": updated_at,
-                    }},
+                    {"$set": set_data},
                     upsert=True,
                 )
             )

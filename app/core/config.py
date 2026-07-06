@@ -25,6 +25,7 @@ for _legacy, _new in _LEGACY_ENV_ALIASES.items():
 class Settings(BaseSettings):
     # 基础配置
     DEBUG: bool = Field(default=True)
+    ENABLE_DOCS: bool = Field(default=True)
     HOST: str = Field(default="0.0.0.0")
     PORT: int = Field(default=8000)
     ALLOWED_ORIGINS: List[str] = Field(default_factory=lambda: ["*"])

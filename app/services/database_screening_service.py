@@ -116,49 +116,68 @@ class DatabaseScreeningService:
         """
         try:
             db = get_mongo_db()
-            collection = db[self.collection_name]
+            basic_collection = db[self.collection_name]
+            quotes_collection = db["market_quotes"]
 
-            # 🔥 获取数据源优先级配置
-            if not source:
-                from app.core.unified_config import UnifiedConfigManager
-                config = UnifiedConfigManager()
-                data_source_configs = await config.get_data_source_configs_async()
+            # 区分静态基础条件（stock_screening_view）与 动态行情/估值条件（market_quotes）
+            quote_metric_fields = {
+                "total_mv", "circ_mv", "pe", "pb", "pe_ttm", "pb_mrq",
+                "roe", "turnover_rate", "volume_ratio", "close", "pct_chg",
+                "amount", "volume"
+            }
 
-                logger.info(f"🔍 [database_screening] 获取到 {len(data_source_configs)} 个数据源配置")
-                for ds in data_source_configs:
-                    logger.info(f"   - {ds.name}: type={ds.type}, priority={ds.priority}, enabled={ds.enabled}")
+            basic_conditions = []
+            quote_conditions = []
 
-                # 提取启用的数据源，按优先级排序
-                enabled_sources = [
-                    ds.type.lower() for ds in data_source_configs
-                    if ds.enabled and ds.type.lower() in ['tushare', 'akshare', 'baostock']
-                ]
+            for cond in conditions:
+                field = cond.get("field") if isinstance(cond, dict) else getattr(cond, "field", None)
+                if field in quote_metric_fields:
+                    quote_conditions.append(cond)
+                else:
+                    basic_conditions.append(cond)
 
-                logger.info(f"🔍 [database_screening] 启用的数据源（按优先级）: {enabled_sources}")
+            logger.info(f"🔍 [screen_stocks] 基础条件数: {len(basic_conditions)}, 行情/估值条件数: {len(quote_conditions)}")
 
-                if not enabled_sources:
-                    enabled_sources = ['tushare', 'akshare', 'baostock']
-                    logger.warning(f"⚠️ [database_screening] 没有启用的数据源，使用默认: {enabled_sources}")
+            basic_query = await self._build_query(basic_conditions)
+            quote_query = await self._build_query(quote_conditions)
 
-                source = enabled_sources[0] if enabled_sources else 'tushare'
-                logger.info(f"✅ [database_screening] 最终使用的数据源: {source}")
+            # 获取匹配基础条件的股票代码
+            basic_codes = None
+            if basic_conditions:
+                basic_codes = set(await basic_collection.distinct("code", basic_query))
+                logger.info(f"📋 满足基础条件的股票数: {len(basic_codes)}")
 
-            # 构建查询条件（现在视图已包含实时行情数据，可以直接查询所有字段）
-            query = await self._build_query(conditions)
+            # 获取匹配行情估值条件的股票代码
+            quote_codes = None
+            if quote_conditions:
+                quote_codes = set(await quotes_collection.distinct("code", quote_query))
+                logger.info(f"📋 满足行情/估值条件的股票数: {len(quote_codes)}")
 
-            # 🔥 添加数据源筛选
-            query["source"] = source
+            # 计算交集代码
+            if basic_codes is not None and quote_codes is not None:
+                final_codes = list(basic_codes.intersection(quote_codes))
+            elif basic_codes is not None:
+                final_codes = list(basic_codes)
+            elif quote_codes is not None:
+                final_codes = list(quote_codes)
+            else:
+                final_codes = None  # 代表全部股票
 
-            logger.info(f"📋 数据库查询条件: {query}")
+            # 构建最终查询
+            if final_codes is not None:
+                query = {"code": {"$in": final_codes}}
+                total_count = len(final_codes)
+            else:
+                query = {}
+                total_count = await basic_collection.count_documents(query)
+
+            logger.info(f"📋 最终数据库查询匹配总数: {total_count}")
 
             # 构建排序条件
             sort_conditions = self._build_sort_conditions(order_by)
 
-            # 获取总数
-            total_count = await collection.count_documents(query)
-
             # 执行查询
-            cursor = collection.find(query)
+            cursor = basic_collection.find(query)
 
             # 应用排序
             if sort_conditions:
@@ -171,19 +190,18 @@ class DatabaseScreeningService:
             results = []
             codes = []
             async for doc in cursor:
-                # 转换结果格式
                 result = self._format_result(doc)
                 results.append(result)
                 codes.append(doc.get("code"))
 
-            # 批量查询财务数据（ROE等）- 如果视图中没有包含
+            # 批量查询财务与行情数据填充
             if codes:
                 await self._enrich_with_financial_data(results, codes)
 
-            logger.info(f"✅ 数据库筛选完成: 总数={total_count}, 返回={len(results)}, 数据源={source}")
+            logger.info(f"✅ 数据库筛选完成: 总数={total_count}, 返回={len(results)}")
 
             return results, total_count
-            
+
         except Exception as e:
             logger.error(f"❌ 数据库筛选失败: {e}")
             raise Exception(f"数据库筛选失败: {str(e)}")
@@ -252,70 +270,42 @@ class DatabaseScreeningService:
     
     async def _enrich_with_financial_data(self, results: List[Dict[str, Any]], codes: List[str]) -> None:
         """
-        批量查询财务数据并填充到结果中
-
-        Args:
-            results: 筛选结果列表
-            codes: 股票代码列表
+        批量查询行情与财务数据并填充到结果中
         """
         try:
             db = get_mongo_db()
+            quotes_coll = db['market_quotes']
             financial_collection = db['stock_financial_data']
 
-            # 🔥 获取数据源优先级配置
-            from app.core.unified_config import UnifiedConfigManager
-            config = UnifiedConfigManager()
-            data_source_configs = await config.get_data_source_configs_async()
+            # 1. 批量查询行情与估值指标 (market_quotes)
+            quotes_cursor = quotes_coll.find({"code": {"$in": codes}}, projection={"_id": 0})
+            quotes_map = {doc.get("code"): doc async for doc in quotes_cursor}
 
-            # 提取启用的数据源，按优先级排序
-            enabled_sources = [
-                ds.type.lower() for ds in data_source_configs
-                if ds.enabled and ds.type.lower() in ['tushare', 'akshare', 'baostock']
-            ]
+            for result in results:
+                code = result.get("code")
+                q = quotes_map.get(code)
+                if q:
+                    for f in ["close", "pct_chg", "total_mv", "circ_mv", "pe", "pb", "amount", "volume", "turnover_rate"]:
+                        if q.get(f) is not None:
+                            result[f] = q.get(f)
 
-            if not enabled_sources:
-                enabled_sources = ['tushare', 'akshare', 'baostock']
-
-            # 优先使用优先级最高的数据源
-            preferred_source = enabled_sources[0] if enabled_sources else 'tushare'
-
-            # 批量查询最新的财务数据
-            # 按 code 分组，取每个 code 的最新一期数据（只查询优先级最高的数据源）
+            # 2. 批量查询财报 ROE (stock_financial_data)
             pipeline = [
-                {"$match": {"code": {"$in": codes}, "data_source": preferred_source}},
+                {"$match": {"code": {"$in": codes}}},
                 {"$sort": {"code": 1, "report_period": -1}},
                 {"$group": {
                     "_id": "$code",
                     "roe": {"$first": "$roe"},
-                    "roa": {"$first": "$roa"},
-                    "netprofit_margin": {"$first": "$netprofit_margin"},
-                    "gross_margin": {"$first": "$gross_margin"},
                 }}
             ]
 
-            financial_data_map = {}
             async for doc in financial_collection.aggregate(pipeline):
                 code = doc.get("_id")
-                financial_data_map[code] = {
-                    "roe": doc.get("roe"),
-                    "roa": doc.get("roa"),
-                    "netprofit_margin": doc.get("netprofit_margin"),
-                    "gross_margin": doc.get("gross_margin"),
-                }
+                for result in results:
+                    if result.get("code") == code and result.get("roe") is None:
+                        result["roe"] = doc.get("roe")
 
-            # 填充财务数据到结果中
-            for result in results:
-                code = result.get("code")
-                if code in financial_data_map:
-                    financial_data = financial_data_map[code]
-                    # 只更新 ROE（如果 stock_basic_info 中没有的话）
-                    if result.get("roe") is None:
-                        result["roe"] = financial_data.get("roe")
-                    # 可以添加更多财务指标
-                    # result["roa"] = financial_data.get("roa")
-                    # result["netprofit_margin"] = financial_data.get("netprofit_margin")
-
-            logger.debug(f"✅ 已填充 {len(financial_data_map)} 条财务数据")
+            logger.debug(f"✅ 已填充 {len(results)} 条行情与财务数据")
 
         except Exception as e:
             logger.warning(f"⚠️ 填充财务数据失败: {e}")
@@ -323,27 +313,42 @@ class DatabaseScreeningService:
 
     def _format_result(self, doc: Dict[str, Any]) -> Dict[str, Any]:
         """格式化查询结果，统一使用后端字段名"""
-        # 根据股票代码推断市场类型
-        code = doc.get("code", "")
-        market_type = "A股"  # 默认A股
-        if code:
-            if code.startswith("6"):
-                market_type = "A股"  # 上海
-            elif code.startswith(("0", "3")):
-                market_type = "A股"  # 深圳
-            elif code.startswith("8") or code.startswith("4"):
-                market_type = "A股"  # 北交所
+        code_str = str(doc.get("code") or "").zfill(6)
+        market_type = "A股"
+
+        sse = doc.get("sse") or doc.get("exchange")
+        board = doc.get("market") if doc.get("market") not in (None, "", "A股") else doc.get("board")
+
+        if not sse:
+            if code_str.startswith(("6", "9")):
+                sse = "上海证券交易所"
+            elif code_str.startswith(("0", "3")):
+                sse = "深圳证券交易所"
+            elif code_str.startswith(("4", "8", "920")):
+                sse = "北京证券交易所"
+            else:
+                sse = "上海证券交易所"
+
+        if not board:
+            if code_str.startswith("688"):
+                board = "科创板"
+            elif code_str.startswith(("300", "301")):
+                board = "创业板"
+            elif code_str.startswith(("8", "4", "920")):
+                board = "北交所"
+            else:
+                board = "主板"
 
         result = {
             # 基础信息
-            "code": doc.get("code"),
-            "name": doc.get("name"),
-            "industry": doc.get("industry"),
-            "area": doc.get("area"),
+            "code": code_str,
+            "name": doc.get("name") or doc.get("code"),
+            "industry": doc.get("industry") or "-",
+            "area": doc.get("area") or "-",
             "market": market_type,  # 市场类型（A股、美股、港股）
-            "board": doc.get("market"),  # 板块（主板、创业板、科创板等）
-            "exchange": doc.get("sse"),  # 交易所（上海证券交易所、深圳证券交易所等）
-            "list_date": doc.get("list_date"),
+            "board": board,        # 板块（主板、创业板、科创板等）
+            "exchange": sse,       # 交易所（上海证券交易所、深圳证券交易所等）
+            "list_date": doc.get("list_date") or "",
 
             # 市值信息（亿元）
             "total_mv": doc.get("total_mv"),
@@ -360,7 +365,7 @@ class DatabaseScreeningService:
             "turnover_rate": doc.get("turnover_rate"),
             "volume_ratio": doc.get("volume_ratio"),
 
-            # 交易数据（从视图中获取，视图已包含实时行情数据）
+            # 交易数据
             "close": doc.get("close"),              # 收盘价
             "pct_chg": doc.get("pct_chg"),          # 涨跌幅(%)
             "amount": doc.get("amount"),            # 成交额
@@ -369,22 +374,11 @@ class DatabaseScreeningService:
             "high": doc.get("high"),                # 最高价
             "low": doc.get("low"),                  # 最低价
 
-            # 技术指标（基础信息筛选时为None）
-            "ma20": None,
-            "rsi14": None,
-            "kdj_k": None,
-            "kdj_d": None,
-            "kdj_j": None,
-            "dif": None,
-            "dea": None,
-            "macd_hist": None,
-
             # 元数据
             "source": doc.get("source", "database"),
             "updated_at": doc.get("updated_at"),
         }
         
-        # 移除None值
         return {k: v for k, v in result.items() if v is not None}
     
     async def get_field_statistics(self, field: str) -> Dict[str, Any]:

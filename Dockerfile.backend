@@ -27,11 +27,11 @@ RUN mkdir -p /app/logs /app/data /app/config && \
     echo 'Acquire::https::Timeout "30";' >> /etc/apt/apt.conf.d/80-retries && \
     # 更新软件源，允许失败后继续
     (apt-get update || apt-get update || apt-get update) && \
-    apt-get install -y --no-install-recommends \
+    apt-get install -y --no-install-recommends --fix-missing \
         ca-certificates \
         curl \
         fontconfig \
-        fonts-noto-cjk \
+        fonts-noto \
         wget \
         xvfb && \
     # 根据架构设置变量

@@ -390,8 +390,17 @@ def get_mongo_client() -> AsyncIOMotorClient:
 
 def get_mongo_db() -> AsyncIOMotorDatabase:
     """获取MongoDB数据库实例"""
+    global mongo_db
     if mongo_db is None:
-        raise RuntimeError("MongoDB数据库未初始化")
+        if db_manager.mongo_db is not None:
+            mongo_db = db_manager.mongo_db
+        else:
+            client = AsyncIOMotorClient(
+                settings.MONGO_URI,
+                maxPoolSize=settings.MONGO_MAX_CONNECTIONS,
+                minPoolSize=settings.MONGO_MIN_CONNECTIONS
+            )
+            mongo_db = client[settings.MONGO_DB]
     return mongo_db
 
 

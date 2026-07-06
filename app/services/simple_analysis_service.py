@@ -339,42 +339,71 @@ def _get_default_backend_url(provider: str) -> str:
 def _get_default_provider_by_model(model_name: str) -> str:
     """
     根据模型名称返回默认的供应商映射
-    这是一个后备方案，当数据库查询失败时使用
+    这是一个后备方案，当数据库查询失败或未映射新模型时使用
     """
-    # 模型名称到供应商的默认映射
-    model_provider_map = {
-        # 阿里百炼 (DashScope)
-        'qwen-turbo': 'qwen',
-        'qwen-plus': 'qwen',
-        'qwen-max': 'qwen',
-        'qwen-plus-latest': 'qwen',
-        'qwen-max-longcontext': 'qwen',
+    if not model_name:
+        return 'google'
 
-        # OpenAI
-        'gpt-3.5-turbo': 'openai',
-        'gpt-4': 'openai',
-        'gpt-4-turbo': 'openai',
-        'gpt-4o': 'openai',
-        'gpt-4o-mini': 'openai',
+    m_lower = model_name.lower()
+    if 'gemini' in m_lower:
+        provider = 'google'
+    elif 'qwen' in m_lower or 'dashscope' in m_lower:
+        provider = 'qwen'
+    elif 'gpt' in m_lower or m_lower.startswith(('o1', 'o3')):
+        provider = 'openai'
+    elif 'deepseek' in m_lower:
+        provider = 'deepseek'
+    elif 'glm' in m_lower or 'chatglm' in m_lower:
+        provider = 'glm'
+    elif 'claude' in m_lower:
+        provider = 'anthropic'
+    elif 'ernie' in m_lower:
+        provider = 'qianfan'
+    elif '302' in m_lower:
+        provider = '302ai'
+    elif 'aihubmix' in m_lower:
+        provider = 'aihubmix'
+    else:
+        # 模型名称到供应商的默认字典映射
+        model_provider_map = {
+            # 阿里百炼 (DashScope)
+            'qwen-turbo': 'qwen',
+            'qwen-plus': 'qwen',
+            'qwen-max': 'qwen',
+            'qwen-plus-latest': 'qwen',
+            'qwen-max-longcontext': 'qwen',
 
-        # Google
-        'gemini-pro': 'google',
-        'gemini-2.0-flash': 'google',
-        'gemini-2.0-flash-thinking-exp': 'google',
+            # OpenAI
+            'gpt-3.5-turbo': 'openai',
+            'gpt-4': 'openai',
+            'gpt-4-turbo': 'openai',
+            'gpt-4o': 'openai',
+            'gpt-4o-mini': 'openai',
 
-        # DeepSeek
-        'deepseek-chat': 'deepseek',
-        'deepseek-coder': 'deepseek',
+            # Google
+            'gemini-pro': 'google',
+            'gemini-2.5-pro': 'google',
+            'gemini-2.5-flash': 'google',
+            'gemini-2.0-flash': 'google',
+            'gemini-1.5-pro': 'google',
+            'gemini-1.5-flash': 'google',
+            'gemini-2.0-flash-thinking-exp': 'google',
 
-        # 智谱AI
-        'glm-4': 'glm',
-        'glm-3-turbo': 'glm',
-        'chatglm3-6b': 'glm'
-    }
+            # DeepSeek
+            'deepseek-chat': 'deepseek',
+            'deepseek-coder': 'deepseek',
 
-    provider = model_provider_map.get(model_name, 'qwen')  # 默认使用阿里百炼
+            # 智谱AI
+            'glm-4': 'glm',
+            'glm-3-turbo': 'glm',
+            'chatglm3-6b': 'glm'
+        }
+
+        provider = model_provider_map.get(model_name, 'qwen')  # 默认使用阿里百炼
+
     logger.info(f"🔧 使用默认映射: {model_name} -> {provider}")
     return provider
+
 
 
 def create_analysis_config(

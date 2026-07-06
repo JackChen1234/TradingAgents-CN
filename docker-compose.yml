@@ -20,6 +20,9 @@ services:
       - ./config:/app/config
       # 数据目录映射
       - ./data:/app/data
+      # 源代码目录映射
+      - ./app:/app/app
+      - ./tradingagents:/app/tradingagents
     env_file:
       - .env
     environment:

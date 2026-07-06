@@ -53,10 +53,13 @@
             <el-form-item label="行业分类">
               <el-select
                 v-model="filters.industry"
-                placeholder="选择行业"
+                placeholder="选择行业（可搜索/多选）"
                 multiple
+                filterable
+                clearable
                 collapse-tags
                 collapse-tags-tooltip
+                style="width: 100%"
               >
                 <el-option
                   v-for="industry in industryOptions"
@@ -241,11 +244,12 @@
         :data="paginatedResults"
         @selection-change="handleSelectionChange"
         stripe
+        border
         style="width: 100%"
       >
-        <el-table-column type="selection" width="55" />
+        <el-table-column type="selection" width="50" align="center" header-align="center" />
 
-        <el-table-column prop="code" label="股票代码" width="120">
+        <el-table-column prop="code" label="股票代码" width="110" align="center" header-align="center">
           <template #default="{ row }">
             <el-link type="primary" @click="viewStockDetail(row)">
               {{ row.code }}
@@ -253,71 +257,84 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="name" label="股票名称" width="150" />
+        <el-table-column prop="name" label="股票名称" min-width="120" align="left" header-align="left" show-overflow-tooltip />
 
-        <el-table-column prop="industry" label="行业" width="120" />
-
-        <el-table-column prop="close" label="当前价格" width="100" align="right">
+        <el-table-column prop="industry" label="行业" min-width="130" align="left" header-align="left" show-overflow-tooltip>
           <template #default="{ row }">
-            <span v-if="row.close">¥{{ row.close?.toFixed(2) }}</span>
+            {{ row.industry || '-' }}
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="board" label="板块" width="100" align="center" header-align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.board" size="small" :type="row.board === '创业板' ? 'warning' : row.board === '科创板' ? 'danger' : 'info'">
+              {{ row.board }}
+            </el-tag>
             <span v-else class="text-gray-400">-</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="pct_chg" label="涨跌幅" width="100" align="right">
+        <el-table-column prop="close" label="当前价格" width="105" align="right" header-align="right">
           <template #default="{ row }">
-            <span v-if="row.pct_chg !== null && row.pct_chg !== undefined" :class="getChangeClass(row.pct_chg)">
-              {{ row.pct_chg > 0 ? '+' : '' }}{{ row.pct_chg?.toFixed(2) }}%
+            <span v-if="row.close !== null && row.close !== undefined" class="font-medium">¥{{ Number(row.close).toFixed(2) }}</span>
+            <span v-else class="text-gray-400">-</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="pct_chg" label="涨跌幅" width="105" align="right" header-align="right">
+          <template #default="{ row }">
+            <span v-if="row.pct_chg !== null && row.pct_chg !== undefined" :class="getChangeClass(row.pct_chg)" class="font-medium">
+              {{ row.pct_chg > 0 ? '+' : '' }}{{ Number(row.pct_chg).toFixed(2) }}%
             </span>
             <span v-else class="text-gray-400">-</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="total_mv" label="市值" width="120" align="right">
+        <el-table-column prop="total_mv" label="总市值" width="115" align="right" header-align="right">
           <template #default="{ row }">
             {{ formatMarketCap(row.total_mv) }}
           </template>
         </el-table-column>
 
-        <el-table-column prop="pe" label="市盈率" width="130" align="right">
+        <el-table-column prop="pe" label="市盈率(PE)" width="110" align="right" header-align="right">
           <template #default="{ row }">
-            <span v-if="row.pe">
-              {{ row.pe?.toFixed(2) }}
-              <el-tag v-if="row.pe_is_realtime" type="success" size="small" style="margin-left: 4px">实时</el-tag>
+            <span v-if="row.pe !== null && row.pe !== undefined">
+              {{ Number(row.pe).toFixed(2) }}
             </span>
             <span v-else class="text-gray-400">-</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="pb" label="市净率" width="130" align="right">
+        <el-table-column prop="pb" label="市净率(PB)" width="110" align="right" header-align="right">
           <template #default="{ row }">
-            <span v-if="row.pb">
-              {{ row.pb?.toFixed(2) }}
-              <el-tag v-if="row.pe_is_realtime" type="success" size="small" style="margin-left: 4px">实时</el-tag>
+            <span v-if="row.pb !== null && row.pb !== undefined">
+              {{ Number(row.pb).toFixed(2) }}
             </span>
             <span v-else class="text-gray-400">-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="roe" label="ROE(%)" width="110" align="right">
+
+        <el-table-column prop="roe" label="ROE(%)" width="100" align="right" header-align="right">
           <template #default="{ row }">
-            <span v-if="row.roe !== null && row.roe !== undefined">{{ row.roe?.toFixed(2) }}%</span>
+            <span v-if="row.roe !== null && row.roe !== undefined">{{ Number(row.roe).toFixed(2) }}%</span>
             <span v-else class="text-gray-400">-</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="board" label="板块" width="100">
+        <el-table-column prop="turnover_rate" label="换手率" width="100" align="right" header-align="right">
           <template #default="{ row }">
-            {{ row.board || '-' }}
+            <span v-if="row.turnover_rate !== null && row.turnover_rate !== undefined">{{ Number(row.turnover_rate).toFixed(2) }}%</span>
+            <span v-else class="text-gray-400">-</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="exchange" label="交易所" width="140">
+        <el-table-column prop="exchange" label="交易所" width="135" align="center" header-align="center" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.exchange || '-' }}
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="170" fixed="right" align="center" header-align="center">
           <template #default="{ row }">
             <el-button type="text" size="small" @click="analyzeSingle(row)">
               分析
@@ -681,11 +698,13 @@ const getChangeClass = (changePercent: number) => {
   return ''
 }
 
-const formatMarketCap = (marketCap: number) => {
-  if (marketCap >= 10000) {
-    return `${(marketCap / 10000).toFixed(2)}万亿`
+const formatMarketCap = (marketCap: number | null | undefined) => {
+  if (marketCap === null || marketCap === undefined || isNaN(Number(marketCap)) || Number(marketCap) <= 0) return '-'
+  const num = Number(marketCap)
+  if (num >= 10000) {
+    return `${(num / 10000).toFixed(2)}万亿`
   } else {
-    return `${marketCap.toFixed(2)}亿`
+    return `${num.toFixed(2)}亿`
   }
 }
 
@@ -716,21 +735,21 @@ const loadFieldConfig = async () => {
 // 加载行业列表
 const loadIndustries = async () => {
   try {
-    const response = await screeningApi.getIndustries()
-    const data = response.data || response
-    industryOptions.value = data.industries || []
-    console.log('行业列表加载成功:', industryOptions.value.length, '个行业')
+    const response: any = await screeningApi.getIndustries()
+    const rawList = response?.industries || response?.data?.industries || (Array.isArray(response?.data) ? response.data : [])
+    if (Array.isArray(rawList) && rawList.length > 0) {
+      industryOptions.value = rawList.map((item: any) => ({
+        label: item.count ? `${item.label || item.value} (${item.count})` : (item.label || item.value),
+        value: item.value || item.label,
+        count: item.count || 0
+      }))
+      console.log('行业列表加载成功:', industryOptions.value.length, '个行业')
+    } else {
+      console.warn('获取行业列表为空')
+    }
   } catch (error) {
     console.error('加载行业列表失败:', error)
     ElMessage.error('加载行业列表失败')
-    // 如果加载失败，使用默认的行业列表
-    industryOptions.value = [
-      { label: '银行', value: '银行' },
-      { label: '证券', value: '证券' },
-      { label: '保险', value: '保险' },
-      { label: '房地产', value: '房地产' },
-      { label: '医药生物', value: '医药生物' }
-    ]
   }
 }
 

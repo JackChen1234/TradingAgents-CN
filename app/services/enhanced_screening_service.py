@@ -211,22 +211,112 @@ class EnhancedScreeningService:
 
     async def _enrich_results_with_realtime_metrics(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        为筛选结果添加PE/PB（使用静态数据，避免性能问题）
-
-        Args:
-            items: 筛选结果列表
-
-        Returns:
-            List[Dict]: 富集后的结果列表
+        为筛选结果的高效富集行情与基本面指标
+        1. 优先使用本地 MongoDB market_quotes 表
+        2. 仍缺失最新行情的记录，通过 GTImg 批量行情接口极速补齐(50条约0.1秒)
+        3. 保证板块和交易所字段正确对齐
         """
-        # 🔥 股票筛选场景：直接使用 stock_basic_info 中的静态 PE/PB
-        # 原因：批量计算动态 PE 会导致严重的性能问题（每个股票都要查询多个集合）
-        # 静态 PE 基于最近一个交易日的收盘价，对于筛选场景已经足够准确
+        if not items:
+            return items
 
-        logger.info(f"📊 [筛选结果富集] 使用静态PE/PB（避免性能问题），共 {len(items)} 只股票")
+        logger.info(f"📊 [筛选结果富集] 开始对 {len(items)} 只股票进行数据富集...")
 
-        # 注意：items 中的 PE/PB 已经来自 stock_basic_info，这里不需要额外处理
-        # 如果未来需要实时 PE，可以在单个股票详情页面单独计算
+        # 1. 从 MongoDB market_quotes 读取
+        try:
+            db = get_mongo_db()
+            coll = db["market_quotes"]
+            codes = [str(it.get("code")).zfill(6) for it in items if it.get("code")]
+            if codes:
+                cursor = coll.find({"code": {"$in": codes}}, projection={"_id": 0})
+                quotes_list = await cursor.to_list(length=len(codes))
+                quotes_map = {str(d.get("code")).zfill(6): d for d in quotes_list}
+                for it in items:
+                    key = str(it.get("code")).zfill(6)
+                    q = quotes_map.get(key)
+                    if q:
+                        for f in ["close", "pct_chg", "total_mv", "circ_mv", "pe", "pb", "amount", "volume", "turnover_rate"]:
+                            if q.get(f) is not None and (it.get(f) is None or it.get(f) == 0):
+                                it[f] = q.get(f)
+        except Exception as e:
+            logger.warning(f"⚠️ 数据库行情富集警告: {e}")
+
+        # 2. 对仍然缺失价格或涨跌幅的股票，调用 GTImg 接口批量补齐
+        missing_items = [
+            it for it in items 
+            if it.get("close") is None or it.get("pct_chg") is None or it.get("total_mv") is None or it.get("pe") is None
+        ]
+        if missing_items:
+            try:
+                import urllib.request
+                import asyncio
+
+                symbols = []
+                for it in missing_items:
+                    c = str(it.get("code")).zfill(6)
+                    prefix = "sh" if c.startswith(("6", "9")) else "sz" if c.startswith(("0", "3")) else "bj"
+                    symbols.append(prefix + c)
+
+                sym_str = ",".join(symbols)
+                url = f"http://qt.gtimg.cn/q={sym_str}"
+
+                def fetch_gtimg():
+                    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(req, timeout=3) as resp:
+                        return resp.read().decode("gbk", errors="ignore")
+
+                loop = asyncio.get_event_loop()
+                content = await loop.run_in_executor(None, fetch_gtimg)
+
+                gtimg_map = {}
+                for line in content.split(";"):
+                    line = line.strip()
+                    if not line or "~" not in line:
+                        continue
+                    parts = line.split("~")
+                    if len(parts) > 46:
+                        raw_code = parts[2].zfill(6)
+                        try:
+                            gtimg_map[raw_code] = {
+                                "close": float(parts[3]) if parts[3] and parts[3] != "0.00" else None,
+                                "pct_chg": float(parts[32]) if parts[32] else None,
+                                "amount": float(parts[37]) * 10000 if parts[37] else None,
+                                "turnover_rate": float(parts[38]) if parts[38] else None,
+                                "pe": float(parts[39]) if parts[39] else None,
+                                "total_mv": float(parts[44] or parts[45]) if (parts[44] or parts[45]) else None,
+                                "pb": float(parts[46]) if parts[46] else None,
+                            }
+                        except ValueError:
+                            pass
+
+                for it in items:
+                    key = str(it.get("code")).zfill(6)
+                    g = gtimg_map.get(key)
+                    if g:
+                        for k, v in g.items():
+                            if v is not None and (it.get(k) is None or it.get(k) == 0):
+                                it[k] = v
+            except Exception as e:
+                logger.warning(f"⚠️ 实时行情补齐网络请求警告: {e}")
+
+        # 3. 板块与交易所兜底补全
+        for it in items:
+            c = str(it.get("code")).zfill(6)
+            if not it.get("exchange") or it.get("exchange") == "-":
+                if c.startswith(("6", "9")):
+                    it["exchange"] = "上海证券交易所"
+                elif c.startswith(("0", "3")):
+                    it["exchange"] = "深圳证券交易所"
+                elif c.startswith(("4", "8", "920")):
+                    it["exchange"] = "北京证券交易所"
+            if not it.get("board") or it.get("board") in ["-", "A股"]:
+                if c.startswith("688"):
+                    it["board"] = "科创板"
+                elif c.startswith(("300", "301")):
+                    it["board"] = "创业板"
+                elif c.startswith(("8", "4", "920")):
+                    it["board"] = "北交所"
+                else:
+                    it["board"] = "主板"
 
         return items
 

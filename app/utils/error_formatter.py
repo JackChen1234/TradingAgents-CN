@@ -99,17 +99,10 @@ class ErrorFormatter:
             "api key", "api_key", "apikey", "invalid_api_key", "authentication", 
             "unauthorized", "401", "403", "gemini", "openai", "dashscope", "qianfan", "qwen", "zhipu", "glm"
         ]):
-            # LLM API Key 错误
-            if any(keyword in error_lower for keyword in [
-                "api key", "api_key", "apikey", "invalid", "authentication", 
-                "unauthorized", "401", "invalid_api_key", "api key not valid"
-            ]):
-                return ErrorCategory.LLM_API_KEY, llm_provider
-            
             # LLM 配额/限流错误
             if any(keyword in error_lower for keyword in [
                 "quota", "rate limit", "too many requests", "429", "resource exhausted",
-                "insufficient_quota", "billing"
+                "resource_exhausted", "insufficient_quota", "billing", "exceeded your current quota"
             ]):
                 return ErrorCategory.LLM_QUOTA, llm_provider
 
@@ -125,6 +118,13 @@ class ErrorFormatter:
                 "connection", "network", "timeout", "unreachable", "dns", "ssl"
             ]):
                 return ErrorCategory.LLM_NETWORK, llm_provider
+
+            # LLM API Key 错误
+            if any(keyword in error_lower for keyword in [
+                "api key", "api_key", "apikey", "invalid_api_key", "authentication", 
+                "unauthorized", "401", "api key not valid", "key invalid", "密钥无效", "token 无效"
+            ]):
+                return ErrorCategory.LLM_API_KEY, llm_provider
 
             # LLM 其他错误
             return ErrorCategory.LLM_OTHER, llm_provider

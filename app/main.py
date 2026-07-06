@@ -605,8 +605,8 @@ app = FastAPI(
     title="TradingAgents-CN API",
     description="股票分析与批量队列系统 API",
     version=get_version(),
-    docs_url="/docs" if settings.DEBUG else None,
-    redoc_url="/redoc" if settings.DEBUG else None,
+    docs_url="/docs" if settings.ENABLE_DOCS else None,
+    redoc_url="/redoc" if settings.ENABLE_DOCS else None,
     lifespan=lifespan
 )
 
@@ -738,7 +738,7 @@ async def root():
         "name": "TradingAgents-CN API",
         "version": get_version(),
         "status": "running",
-        "docs_url": "/docs" if settings.DEBUG else None
+        "docs_url": "/docs" if settings.ENABLE_DOCS else None
     }
 
 

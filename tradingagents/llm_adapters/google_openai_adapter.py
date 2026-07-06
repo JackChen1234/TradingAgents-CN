@@ -169,13 +169,10 @@ class ChatGoogleOpenAI(ChatGoogleGenerativeAI):
                 for generation_list in result.generations:
                     if isinstance(generation_list, list):
                         for generation in generation_list:
-                            if hasattr(generation, 'message') and generation.message:
-                                # 优化消息内容格式
+                            if hasattr(generation, 'message') and getattr(generation, 'message', None):
                                 self._optimize_message_content(generation.message)
-                    else:
-                        # 兼容性处理：如果不是列表，直接处理
-                        if hasattr(generation_list, 'message') and generation_list.message:
-                            self._optimize_message_content(generation_list.message)
+                    elif hasattr(generation_list, 'message') and getattr(generation_list, 'message', None):
+                        self._optimize_message_content(generation_list.message)
 
             # 追踪 token 使用量
             self._track_token_usage(result, kwargs)
@@ -186,9 +183,11 @@ class ChatGoogleOpenAI(ChatGoogleGenerativeAI):
             logger.error(f"❌ Google AI 生成失败: {e}")
             logger.exception(e)  # 打印完整的堆栈跟踪
 
-            # 检查是否为 API Key 无效错误
+            # 检查是否为 API Key 无效错误或配额/超限错误
             error_str = str(e)
-            if 'API_KEY_INVALID' in error_str or 'API key not valid' in error_str:
+            if 'RESOURCE_EXHAUSTED' in error_str or '429' in error_str or 'Quota exceeded' in error_str:
+                error_content = f"Google AI (Gemini) 调用配额已满或超限 (429 Resource Exhausted)。\n\n请检查：\n1. 您的 Google API Key 是否触及免费额度上限或频率限制\n2. 建议在系统设置中切换为 gemini-2.5-flash 模型\n3. 详细信息: {error_str}"
+            elif 'API_KEY_INVALID' in error_str or 'API key not valid' in error_str:
                 error_content = "Google AI API Key 无效或未配置。\n\n请检查：\n1. GOOGLE_API_KEY 环境变量是否正确配置\n2. API Key 是否有效（访问 https://ai.google.dev/ 获取）\n3. 是否启用了 Gemini API\n\n建议：使用其他 AI 模型（如阿里百炼、DeepSeek）"
             elif 'Connection' in error_str or 'Network' in error_str:
                 error_content = f"Google AI 网络连接失败: {error_str}\n\n请检查：\n1. 网络连接是否正常\n2. 是否需要科学上网\n3. 防火墙设置"
@@ -293,6 +292,21 @@ class ChatGoogleOpenAI(ChatGoogleGenerativeAI):
 
 # 支持的模型列表
 GOOGLE_OPENAI_MODELS = {
+    # Gemini 3 系列 - 最新前沿模型
+    "gemini-3.5-flash": {
+        "description": "Gemini 3.5 Flash - 最新 3.5 代极速模型",
+        "context_length": 1000000,
+        "supports_function_calling": True,
+        "recommended_for": ["超快响应", "极速分析", "智能对话"],
+        "avg_response_time": 1.5
+    },
+    "gemini-3.1-pro": {
+        "description": "Gemini 3.1 Pro - 最新 3.1 代旗舰模型",
+        "context_length": 1000000,
+        "supports_function_calling": True,
+        "recommended_for": ["深度推理", "专业分析", "高质量输出"],
+        "avg_response_time": 5.0
+    },
     # Gemini 2.5 系列 - 最新验证模型
     "gemini-2.5-pro": {
         "description": "Gemini 2.5 Pro - 最新旗舰模型，功能强大 (16.68s)",
