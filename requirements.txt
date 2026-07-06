@@ -33,7 +33,7 @@ langchain_anthropic
 langchain-google-genai>=2.1.12  # 修复 client_options 未定义错误
 google-genai>=0.1.0
 dashscope
-streamlit>=1.38.0
+streamlit==1.38.0
 plotly
 psutil
 pymongo  # MongoDB数据库支持，用于Token使用记录存储
