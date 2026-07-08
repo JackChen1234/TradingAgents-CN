@@ -341,6 +341,10 @@ def render_sidebar():
 
         elif llm_provider == "google":
             google_options = [
+                "gemini-3.5-pro",
+                "gemini-3.5-flash",
+                "gemini-3.1-pro",
+                "gemini-3.1-flash",
                 "gemini-2.5-pro", 
                 "gemini-2.5-flash",
                 "gemini-2.5-flash-lite",
@@ -362,6 +366,10 @@ def render_sidebar():
                 options=google_options,
                 index=current_index,
                 format_func=lambda x: {
+                    "gemini-3.5-pro": "Gemini 3.5 Pro - 🧠 最新旗舰模型",
+                    "gemini-3.5-flash": "Gemini 3.5 Flash - 🚀 最新一代极速模型",
+                    "gemini-3.1-pro": "Gemini 3.1 Pro - ⚖️ 旗舰分析模型",
+                    "gemini-3.1-flash": "Gemini 3.1 Flash - ⚡ 极速稳定模型",
                     "gemini-2.5-pro": "Gemini 2.5 Pro - 🚀 最新旗舰模型",
                     "gemini-2.5-flash": "Gemini 2.5 Flash - ⚡ 最新快速模型",
                     "gemini-2.5-flash-lite": "Gemini 2.5 Flash Lite - 💡 轻量快速",

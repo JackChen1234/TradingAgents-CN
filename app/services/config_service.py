@@ -3525,7 +3525,23 @@ class ConfigService:
                 providers_collection = db.llm_providers
                 provider_data = await providers_collection.find_one({"name": provider_name})
                 base_url = provider_data.get("default_base_url") if provider_data else None
-                return await asyncio.get_event_loop().run_in_executor(None, self._test_google_api, api_key, display_name, base_url)
+
+                # 🔍 尝试从用户已配置的模型列表中获取一个 Google 模型名进行测试，避免默认测试模型不可用导致404
+                test_model = None
+                try:
+                    configs_collection = db.llm_configs
+                    # 查找该厂家下已启用的模型配置
+                    user_model_config = await configs_collection.find_one({"provider": provider_name, "is_enabled": True})
+                    if not user_model_config:
+                        # 如果没有启用的，找任意配置的
+                        user_model_config = await configs_collection.find_one({"provider": provider_name})
+                    if user_model_config:
+                        test_model = user_model_config.get("model_name")
+                        logger.info(f"🔍 [Google 厂家测试] 从用户大模型配置中获取到测试模型: {test_model}")
+                except Exception as ex:
+                    logger.warning(f"⚠️ [Google 厂家测试] 查询用户配置模型失败: {ex}")
+
+                return await asyncio.get_event_loop().run_in_executor(None, self._test_google_api, api_key, display_name, base_url, test_model)
             elif provider_name == "deepseek":
                 return await asyncio.get_event_loop().run_in_executor(None, self._test_deepseek_api, api_key, display_name)
             elif provider_name == "dashscope":
@@ -3569,8 +3585,16 @@ class ConfigService:
 
             # 如果没有指定模型，使用默认模型
             if not model_name:
-                model_name = "gemini-2.0-flash-exp"
+                model_name = "gemini-2.5-flash"
                 logger.info(f"⚠️ 未指定模型，使用默认模型: {model_name}")
+
+            # 🔧 [模型名称自动映射] 自动将预览版模型名称映射为 API 内部正确的 preview 标识符
+            if model_name == "gemini-3.1-pro":
+                model_name = "gemini-3.1-pro-preview"
+                logger.info(f"🔄 [模型测试映射] gemini-3.1-pro 自动映射为 gemini-3.1-pro-preview")
+            elif model_name == "gemini-3.1-flash":
+                model_name = "gemini-3.1-flash-preview"
+                logger.info(f"🔄 [模型测试映射] gemini-3.1-flash 自动映射为 gemini-3.1-flash-preview")
 
             logger.info(f"🔍 [Google AI 测试] 开始测试")
             logger.info(f"   display_name: {display_name}")
@@ -3587,8 +3611,13 @@ class ConfigService:
             base_url = base_url.rstrip('/')
             logger.info(f"   base_url (去除斜杠): {base_url}")
 
+            # 如果是 Google 官方 API 域名，但没有 /v1beta 或 /v1 后缀，则自动补齐 /v1beta
+            if "generativelanguage.googleapis.com" in base_url and not (base_url.endswith('/v1beta') or base_url.endswith('/v1')):
+                base_url = base_url + '/v1beta'
+                logger.info(f"   ✅ 检测到官方域名但缺少版本路径，自动补齐: {base_url}")
+
             # 如果 base_url 以 /v1 结尾，替换为 /v1beta（Google AI 的正确端点）
-            if base_url.endswith('/v1'):
+            elif base_url.endswith('/v1'):
                 base_url = base_url[:-3] + '/v1beta'
                 logger.info(f"   ✅ 将 /v1 替换为 /v1beta: {base_url}")
 

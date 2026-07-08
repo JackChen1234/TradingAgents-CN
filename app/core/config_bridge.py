@@ -85,14 +85,17 @@ def bridge_config_to_env():
                 env_key = f"{provider.name.upper()}_API_KEY"
                 existing_env_value = os.getenv(env_key)
 
-                # 检查环境变量是否已存在且有效（不是占位符）
-                if existing_env_value and not existing_env_value.startswith("your_"):
-                    logger.info(f"  ✓ 使用 .env 文件中的 {env_key} (长度: {len(existing_env_value)})")
-                    bridged_count += 1
-                elif provider.api_key and not provider.api_key.startswith("your_"):
-                    # 只有当环境变量不存在或为占位符时，才使用数据库配置
+                # 优先使用数据库配置的 API Key（用户在 Web 后台修改后以数据库为准，类似于 Tushare）
+                if provider.api_key and not provider.api_key.startswith("your_"):
                     os.environ[env_key] = provider.api_key
                     logger.info(f"  ✓ 使用数据库厂家配置的 {env_key} (长度: {len(provider.api_key)})")
+                    if existing_env_value and existing_env_value != provider.api_key:
+                        logger.info(f"  ℹ️  已覆盖 .env 文件中的 {env_key}")
+                    bridged_count += 1
+                # 降级到环境变量配置
+                elif existing_env_value and not existing_env_value.startswith("your_"):
+                    os.environ[env_key] = existing_env_value
+                    logger.info(f"  ✓ 使用 .env 文件中的 {env_key} (长度: {len(existing_env_value)})")
                     bridged_count += 1
                 else:
                     logger.debug(f"  ⏭️  {env_key} 未配置有效的 API Key")

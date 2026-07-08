@@ -44,6 +44,16 @@ class ChatGoogleOpenAI(ChatGoogleGenerativeAI):
         logger.info(f"🔍 [Google初始化] kwargs 中是否包含 google_api_key: {'google_api_key' in kwargs}")
         logger.info(f"🔍 [Google初始化] 传入的 base_url: {base_url}")
 
+        # 🔧 [模型名称自动映射] 自动将预览版模型名称映射为 API 内部正确的 preview 标识符
+        if "model" in kwargs:
+            orig_model = kwargs["model"]
+            if orig_model == "gemini-3.1-pro":
+                kwargs["model"] = "gemini-3.1-pro-preview"
+                logger.info(f"🔄 [模型映射] {orig_model} 自动映射为 gemini-3.1-pro-preview")
+            elif orig_model == "gemini-3.1-flash":
+                kwargs["model"] = "gemini-3.1-flash-preview"
+                logger.info(f"🔄 [模型映射] {orig_model} 自动映射为 gemini-3.1-flash-preview")
+
         # 设置 Google AI 的默认配置
         kwargs.setdefault("temperature", 0.1)
         kwargs.setdefault("max_tokens", 2000)
@@ -358,6 +368,13 @@ class ChatGoogleOpenAI(ChatGoogleGenerativeAI):
 # 支持的模型列表
 GOOGLE_OPENAI_MODELS = {
     # Gemini 3 系列 - 最新前沿模型
+    "gemini-3.5-pro": {
+        "description": "Gemini 3.5 Pro - 最新 3.5 代旗舰模型",
+        "context_length": 1000000,
+        "supports_function_calling": True,
+        "recommended_for": ["深度推理", "专业分析", "高质量输出"],
+        "avg_response_time": 4.5
+    },
     "gemini-3.5-flash": {
         "description": "Gemini 3.5 Flash - 最新 3.5 代极速模型",
         "context_length": 1000000,
@@ -371,6 +388,13 @@ GOOGLE_OPENAI_MODELS = {
         "supports_function_calling": True,
         "recommended_for": ["深度推理", "专业分析", "高质量输出"],
         "avg_response_time": 5.0
+    },
+    "gemini-3.1-flash": {
+        "description": "Gemini 3.1 Flash - 最新 3.1 代极速模型",
+        "context_length": 1000000,
+        "supports_function_calling": True,
+        "recommended_for": ["超快响应", "实时分析", "高频使用"],
+        "avg_response_time": 1.8
     },
     # Gemini 2.5 系列 - 最新验证模型
     "gemini-2.5-pro": {
